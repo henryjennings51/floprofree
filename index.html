@@ -1,0 +1,67 @@
+<html>
+<head>
+	<title>FloPro Free</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+	<script type="text/javascript">
+		function processVideo() {
+			var streamButtonsDiv = document.getElementById('streamButtons');
+			var statusText = document.getElementById('statusText');
+			statusText.innerHTML = 'Loading...';
+			while (streamButtonsDiv.firstChild) {
+				streamButtonsDiv.removeChild(streamButtonsDiv.firstChild);
+			}
+
+			var videoUrl = document.getElementById('videoUrl').value;
+			var videoID = videoUrl.split('/').pop().split('-').shift();
+			if (isNaN(videoID)) {
+				statusText.innerHTML = 'Not a FloTrack video link.';
+				return;
+			}
+
+			$.get('https://api.flocasts.com/videos/' + videoID, function(data) {
+				var embedCode = data['embedCode'];
+				var requestURL = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/JkbHE6ZLb5Oa5WKLyFlc0HTEdVGi/' + embedCode + '?domain=www.flotrack.org&supportedFormats=mp4';
+
+				$.get(requestURL, function(data2) {
+					var streams = data2['authorization_data'][embedCode]['streams'];
+					console.log(streams);
+
+					if (streams[0]['delivery_type'] == 'mp4') {
+						statusText.innerHTML = 'Choose video quality:';
+
+						for (streamNum in streams) {
+							var button = document.createElement('button');
+							button.innerHTML = streams[streamNum].height + 'p';
+							button.onclick = (function() {
+								var currentStream = streamNum;
+								return function () {
+									var streamUrl = atob(streams[currentStream]['url']['data']);
+									window.open(streamUrl);
+								}
+							})();
+							streamButtonsDiv.appendChild(button);
+							streamButtonsDiv.appendChild(document.createElement('br'));
+						}
+					}
+					else {
+						statusText.innerHTML = 'Video not supported :(';
+					}
+				});
+
+			});
+		}
+	</script>
+
+</head>
+
+<body>
+	<center>
+		<h1>FloPro Free</h1><br />
+		<input type="text" placeholder="Paste a FloTrack video link here" size="50" id="videoUrl">
+		<button onclick="processVideo()">Watch</button><br />
+		<h3 id='statusText'></h3>
+		<div id='streamButtons'></div>
+	</center>
+</body>
+
+</html>
