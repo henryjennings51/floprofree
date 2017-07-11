@@ -3,53 +3,127 @@
 	<title>FloPro Free</title>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
 	<script type="text/javascript">
-		function processVideo() {
+
+		// Global exception handler
+		window.onerror = function (message, file, line, col, error) {
+			document.getElementById('statusText').innerHTML = error;
+			return false;
+		};
+
+		function getEmbedCode(videoUrl, finished) {
+			// Get the video ID (a 7 digit number) from the video URL
+			var videoID = videoUrl.split('/').pop().split('-').shift();
+			if (isNaN(videoID)) {
+				throw('Not a FloSports video link.');
+			}
+
+			$.get('https://api.flocasts.com/videos/' + videoID, function(data) {
+				if (!'embedCode' in data) {
+					throw('Something went wrong :(   (embed code)');
+				}
+
+				finished(data['embedCode']);
+			});
+		}
+
+		// Get a list of available streams for this video (different resolutions)
+		function getVideoStreams(embedCode) {
+			var requestURL = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/JkbHE6ZLb5Oa5WKLyFlc0HTEdVGi/' + embedCode + '?domain=www.flotrack.org&supportedFormats=mp4';
+			$.get(requestURL, function(data) {
+				var streamList = data['authorization_data'][embedCode]['streams'];
+				if (streamList == null) {
+					throw('Something went wrong :(   (stream list)');
+				}
+
+				var streams = [];
+				streamList.forEach(function(streamDict){
+					var curStream = {};
+					curStream['url'] = atob(streamDict['url']['data']);
+					curStream['resolution'] = streamDict['height'];
+					curStream['isLive'] = (curStream['url'].indexOf('scaleengine.net') != -1);
+					streams.push(curStream);
+				});
+
+				console.log(streams);
+
+				processLiveVideos(streams);
+			});
+		}
+
+		// This function gets the real URLs for live videos or recordings of previously live videos.
+		// Streams are in HLS format but also available as RTMP
+		function processLiveVideos(streams) {
+			var updatedStreams = [];
+			var runningGetRequests = [];
+
+			streams.forEach(function(streamDict){
+				if (streamDict['isLive']) {
+					// Do a request to streamDict['url'] to get the SMIL XML
+					// Use the xml to build a list of streams & HLS urls, add them to updatedStreams
+					console.log('starting request');
+					var request = $.get(streamDict['url'], function(data) {
+						console.log(data);
+
+						var urlBase = data.getElementsByTagName('meta')[0].getAttribute('base');
+						urlBase = urlBase.replace('rtmp://', 'http://')
+
+						var videoTags = data.getElementsByTagName('video');
+						for (var i = 0; i < videoTags.length; i++) { // Ugh can't use foreach
+							var source = videoTags[i].getAttribute('src');
+
+							var newStreamDict = { 'isLive': true };
+							newStreamDict['url'] = urlBase + '/' + source.replace('mp4:', '') + '/playlist.m3u8';
+							newStreamDict['resolution'] = videoTags[i].getAttribute('height');
+
+							updatedStreams.push(newStreamDict);
+						}
+					});
+
+					runningGetRequests.push(request);
+				}
+				else {
+					updatedStreams.push(streamDict);
+				}
+			});
+
+			// Wait for all video info fetch requests to finish before continuing
+			$.when.apply($, runningGetRequests).done(function(schemas) {
+				console.log(updatedStreams);
+			    
+			    presentVideoStreams(updatedStreams);
+			});
+		}
+
+		// More UI stuff after all the network requests are done
+		function presentVideoStreams(streams) {
+			document.getElementById('statusText').innerHTML = 'Choose video quality:';
 			var streamButtonsDiv = document.getElementById('streamButtons');
-			var statusText = document.getElementById('statusText');
-			statusText.innerHTML = 'Loading...';
+
+			streams.forEach(function(streamDict){
+				var button = document.createElement('button');
+				button.innerHTML = streamDict['resolution'] + 'p';
+				button.onclick = (function() {
+					return function () {
+						window.open(streamDict['url']);
+					}
+				})();
+				streamButtonsDiv.appendChild(button);
+				streamButtonsDiv.appendChild(document.createElement('br'));
+				streamButtonsDiv.appendChild(document.createElement('br'));
+			});
+		}
+
+		function processVideo() {
+			// UI setup
+			var streamButtonsDiv = document.getElementById('streamButtons');
+			document.getElementById('statusText').innerHTML = 'Loading...';
 			while (streamButtonsDiv.firstChild) {
 				streamButtonsDiv.removeChild(streamButtonsDiv.firstChild);
 			}
 
+			// Get video data & present it
 			var videoUrl = document.getElementById('videoUrl').value;
-			var videoID = videoUrl.split('/').pop().split('-').shift();
-			if (isNaN(videoID)) {
-				statusText.innerHTML = 'Not a FloTrack video link.';
-				return;
-			}
-
-			$.get('https://api.flocasts.com/videos/' + videoID, function(data) {
-				var embedCode = data['embedCode'];
-				var requestURL = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/JkbHE6ZLb5Oa5WKLyFlc0HTEdVGi/' + embedCode + '?domain=www.flotrack.org&supportedFormats=mp4';
-
-				$.get(requestURL, function(data2) {
-					var streams = data2['authorization_data'][embedCode]['streams'];
-					console.log(streams);
-
-					if (streams[0]['delivery_type'] == 'mp4') {
-						statusText.innerHTML = 'Choose video quality:';
-
-						for (streamNum in streams) {
-							var button = document.createElement('button');
-							button.innerHTML = streams[streamNum].height + 'p';
-							button.onclick = (function() {
-								var currentStream = streamNum;
-								return function () {
-									var streamUrl = atob(streams[currentStream]['url']['data']);
-									window.open(streamUrl);
-								}
-							})();
-							streamButtonsDiv.appendChild(button);
-							streamButtonsDiv.appendChild(document.createElement('br'));
-							streamButtonsDiv.appendChild(document.createElement('br'));
-						}
-					}
-					else {
-						statusText.innerHTML = 'Video not supported :(';
-					}
-				});
-
-			});
+			getEmbedCode(videoUrl, getVideoStreams);
 		}
 	</script>
 
@@ -58,7 +132,7 @@
 <body>
 	<center>
 		<h1>FloPro Free</h1><br />
-		<input type="text" placeholder="Paste a FloTrack video link here" size="50" id="videoUrl">
+		<input type="text" placeholder="Paste a FloPro video link here" size="50" id="videoUrl">
 		<button onclick="processVideo()">Watch</button><br />
 		<h3 id='statusText'></h3>
 		<div id='streamButtons'></div>
