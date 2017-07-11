@@ -2,6 +2,7 @@
 <head>
 	<title>FloPro Free</title>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 	<script type="text/javascript">
 
 		// Global exception handler
@@ -10,8 +11,21 @@
 			return false;
 		};
 
+		function processVideo() {
+			// UI setup
+			var streamButtonsDiv = document.getElementById('streamButtons');
+			document.getElementById('statusText').innerHTML = 'Loading...';
+			while (streamButtonsDiv.firstChild) {
+				streamButtonsDiv.removeChild(streamButtonsDiv.firstChild);
+			}
+
+			// Get video data & present it
+			var videoUrl = document.getElementById('videoUrl').value;
+			getEmbedCode(videoUrl, getVideoStreams);
+		}
+
+		// Get the video ID (a 7 digit number) from the video URL
 		function getEmbedCode(videoUrl, finished) {
-			// Get the video ID (a 7 digit number) from the video URL
 			var videoID = videoUrl.split('/').pop().split('-').shift();
 			if (isNaN(videoID)) {
 				throw('Not a FloSports video link.');
@@ -30,6 +44,7 @@
 		function getVideoStreams(embedCode) {
 			var requestURL = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/JkbHE6ZLb5Oa5WKLyFlc0HTEdVGi/' + embedCode + '?domain=www.flotrack.org&supportedFormats=mp4';
 			$.get(requestURL, function(data) {
+				console.log(data);
 				var streamList = data['authorization_data'][embedCode]['streams'];
 				if (streamList == null) {
 					throw('Something went wrong :(   (stream list)');
@@ -47,7 +62,7 @@
 				console.log(streams);
 
 				processLiveVideos(streams);
-			});
+			})
 		}
 
 		// This function gets the real URLs for live videos or recordings of previously live videos.
@@ -60,10 +75,7 @@
 				if (streamDict['isLive']) {
 					// Do a request to streamDict['url'] to get the SMIL XML
 					// Use the xml to build a list of streams & HLS urls, add them to updatedStreams
-					console.log('starting request');
 					var request = $.get(streamDict['url'], function(data) {
-						console.log(data);
-
 						var urlBase = data.getElementsByTagName('meta')[0].getAttribute('base');
 						urlBase = urlBase.replace('rtmp://', 'http://')
 
@@ -104,41 +116,52 @@
 				button.innerHTML = streamDict['resolution'] + 'p';
 				button.onclick = (function() {
 					return function () {
-						window.open(streamDict['url']);
+						if (streamDict['isLive']) {
+							if (Hls.isSupported()) {
+								document.getElementById('videoPicker').hidden = true;
+
+								var videoPlayer = document.getElementById('videoPlayer');
+								videoPlayer.hidden = false;
+								var hls = new Hls();
+								console.log(streamDict['url']);
+								hls.loadSource(streamDict['url']);
+								hls.attachMedia(videoPlayer);
+								hls.on(Hls.Events.MANIFEST_PARSED,function() {
+									videoPlayer.play();
+								});
+							}
+							else {
+								throw('Browser is unsupported for this video :( Try the latest Chrome or Safari.');
+							}
+						}
+						else {
+							window.open(streamDict['url']);
+						}
 					}
 				})();
+
 				streamButtonsDiv.appendChild(button);
 				streamButtonsDiv.appendChild(document.createElement('br'));
 				streamButtonsDiv.appendChild(document.createElement('br'));
 			});
 		}
 
-		function processVideo() {
-			// UI setup
-			var streamButtonsDiv = document.getElementById('streamButtons');
-			document.getElementById('statusText').innerHTML = 'Loading...';
-			while (streamButtonsDiv.firstChild) {
-				streamButtonsDiv.removeChild(streamButtonsDiv.firstChild);
-			}
-
-			// Get video data & present it
-			var videoUrl = document.getElementById('videoUrl').value;
-			getEmbedCode(videoUrl, getVideoStreams);
-		}
 	</script>
 
 </head>
 
 <body>
 	<center>
-		<h1>FloPro Free</h1><br />
-		<form onsubmit="processVideo; return false;">
-			<input type="text" placeholder="Paste a FloPro video link here" size="50" id="videoUrl">
-			<button onclick="processVideo()">Watch</button><br />
-			<input type="submit" hidden="true">
-		</form>
-		<h3 id='statusText'></h3>
-		<div id='streamButtons'></div>
+		<div id='videoPicker'>
+			<h1>FloPro Free</h1><br />
+			<form onsubmit="processVideo(); return false;" action="javascript:void(0);">
+				<input type="text" placeholder="Paste a FloPro video link here" size="50" id="videoUrl">
+				<input type="submit" value="Watch"><br />
+			</form>
+			<h3 id='statusText'></h3>
+			<div id='streamButtons'></div>
+		</div>
+		<video id="videoPlayer" controls="true" hidden="true"></video>
 	</center>
 </body>
 
