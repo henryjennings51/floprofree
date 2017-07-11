@@ -132,8 +132,11 @@
 <body>
 	<center>
 		<h1>FloPro Free</h1><br />
-		<input type="text" placeholder="Paste a FloPro video link here" size="50" id="videoUrl">
-		<button onclick="processVideo()">Watch</button><br />
+		<form onsubmit="processVideo; return false;">
+			<input type="text" placeholder="Paste a FloPro video link here" size="50" id="videoUrl">
+			<button onclick="processVideo()">Watch</button><br />
+			<input type="submit" hidden="true">
+		</form>
 		<h3 id='statusText'></h3>
 		<div id='streamButtons'></div>
 	</center>
