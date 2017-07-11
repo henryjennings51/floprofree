@@ -107,6 +107,12 @@
 			});
 		}
 
+		// From https://github.com/WebPlatformTest/HTML5test/blob/10ffb691f026303255ae1b4fab6b5090446478b1/scripts/8/engine.js#L2725-L2730
+		function browserNativelySupportsHLS() {
+			var element = document.createElement('video');
+			return !!element.canPlayType && (element.canPlayType('application/vnd.apple.mpegURL') != '' || element.canPlayType('audio/mpegurl') != '');
+		}
+
 		// More UI stuff after all the network requests are done
 		function presentVideoStreams(streams) {
 			document.getElementById('statusText').innerHTML = 'Choose video quality:';
@@ -117,7 +123,7 @@
 				button.innerHTML = streamDict['resolution'] + 'p';
 				button.onclick = (function() {
 					return function () {
-						if (streamDict['isLive']) {
+						if (streamDict['isLive'] && !browserNativelySupportsHLS()) {
 							if (Hls.isSupported()) {
 								document.getElementById('videoPicker').hidden = true;
 
