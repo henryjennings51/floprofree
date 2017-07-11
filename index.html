@@ -74,26 +74,34 @@
 			var runningGetRequests = [];
 
 			streams.forEach(function(streamDict){
+				console.log('processing:');
+				console.log(streamDict);
 				if (streamDict['isLive']) {
-					// Do a request to streamDict['url'] to get the SMIL XML
-					// Use the xml to build a list of streams & HLS urls, add them to updatedStreams
-					var request = $.get(streamDict['url'], function(data) {
-						var urlBase = data.getElementsByTagName('meta')[0].getAttribute('base');
-						urlBase = urlBase.replace('rtmp://', 'http://')
+					if (streamDict['url'].indexOf('rtmp://') != -1) {
+						streamDict['url'] = streamDict['url'].replace('rtmp://', 'http://').replace('mp4:', '') + '/playlist.m3u8';
+						updatedStreams.push(streamDict);
+					}
+					else {
+						// Do a request to streamDict['url'] to get the SMIL XML
+						// Use the xml to build a list of streams & HLS urls, add them to updatedStreams
+						var request = $.get(streamDict['url'], function(data) {
+							var urlBase = data.getElementsByTagName('meta')[0].getAttribute('base');
+							urlBase = urlBase.replace('rtmp://', 'http://')
 
-						var videoTags = data.getElementsByTagName('video');
-						for (var i = 0; i < videoTags.length; i++) { // Ugh can't use foreach
-							var source = videoTags[i].getAttribute('src');
+							var videoTags = data.getElementsByTagName('video');
+							for (var i = 0; i < videoTags.length; i++) { // Ugh can't use foreach
+								var source = videoTags[i].getAttribute('src');
 
-							var newStreamDict = { 'isLive': true };
-							newStreamDict['url'] = urlBase + '/' + source.replace('mp4:', '') + '/playlist.m3u8';
-							newStreamDict['resolution'] = videoTags[i].getAttribute('height');
+								var newStreamDict = { 'isLive': true };
+								newStreamDict['url'] = urlBase + '/' + source.replace('mp4:', '') + '/playlist.m3u8';
+								newStreamDict['resolution'] = videoTags[i].getAttribute('height');
 
-							updatedStreams.push(newStreamDict);
-						}
-					});
+								updatedStreams.push(newStreamDict);
+							}
+						});
 
-					runningGetRequests.push(request);
+						runningGetRequests.push(request);
+					}
 				}
 				else {
 					updatedStreams.push(streamDict);
@@ -101,9 +109,7 @@
 			});
 
 			// Wait for all video info fetch requests to finish before continuing
-			$.when.apply($, runningGetRequests).done(function(schemas) {
-				console.log(updatedStreams);
-			    
+			$.when.apply($, runningGetRequests).done(function(schemas) {			    
 			    presentVideoStreams(updatedStreams);
 			});
 		}
@@ -121,7 +127,12 @@
 
 			streams.forEach(function(streamDict){
 				var button = document.createElement('button');
-				button.innerHTML = streamDict['resolution'] + 'p';
+				if (streamDict['resolution'] == null) {
+					button.innerHTML = 'Unknown resolution';
+				}
+				else {
+					button.innerHTML = streamDict['resolution'] + 'p';
+				}
 				button.onclick = (function() {
 					return function () {
 						if (streamDict['isLive'] && !browserNativelySupportsHLS()) {
