@@ -18,14 +18,15 @@
 			while (streamButtonsDiv.firstChild) {
 				streamButtonsDiv.removeChild(streamButtonsDiv.firstChild);
 			}
+			document.getElementById('videoUrl').blur();
 
 			// Get video data & present it
 			var videoUrl = document.getElementById('videoUrl').value;
-			getEmbedCode(videoUrl, getVideoStreams);
+			getEmbedCode(videoUrl);
 		}
 
 		// Get the video ID (a 7 digit number) from the video URL
-		function getEmbedCode(videoUrl, finished) {
+		function getEmbedCode(videoUrl) {
 			var videoID = videoUrl.split('/').pop().split('-').shift();
 			if (isNaN(videoID)) {
 				throw('Not a FloSports video link.');
@@ -36,7 +37,7 @@
 					throw('Something went wrong :(   (embed code)');
 				}
 
-				finished(data['embedCode']);
+				getVideoStreams(data['embedCode']);
 			});
 		}
 
